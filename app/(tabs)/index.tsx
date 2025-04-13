@@ -1,74 +1,85 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { db } from '../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useAuth } from '../../hooks/useAuth';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function DashboardScreen() {
+  const [streak, setStreak] = useState(0);
+  const [level, setLevel] = useState(1);
+  const { user } = useAuth();
+  const router = useRouter();
 
-export default function HomeScreen() {
+  // 🚨 Redirect to login if no user
+
+  useEffect(() => {
+    if (user === null) {
+      // Delay redirect until navigation is mounted
+      const timeout = setTimeout(() => {
+        router.replace('/auth/login'); // 👈 or '/(auth)/login' based on your folder
+      }, 0);
+      return () => clearTimeout(timeout);
+    }
+  }, [user]);
+  // 🧠 Fetch user-specific workout data
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) fetchWorkoutData(user.uid);
+    }, [user])
+  );
+
+  
+
+  const fetchWorkoutData = async (uid: string) => {
+    try {
+      const q = query(collection(db, 'workouts'), where('userId', '==', uid));
+      const snapshot = await getDocs(q);
+      const dates = snapshot.docs.map(doc =>
+        doc.data().date.toDate().toDateString()
+      );
+      const uniqueDates = [...new Set(dates)].sort(
+        (a, b) => new Date(b).getTime() - new Date(a).getTime()
+      );
+
+      let currentStreak = 0;
+      let yesterday = new Date();
+      yesterday.setDate(yesterday.getDate());
+
+      for (let i = 0; i < uniqueDates.length; i++) {
+        const day = new Date(uniqueDates[i]);
+        if (
+          currentStreak === 0 &&
+          day.toDateString() === new Date().toDateString()
+        ) {
+          currentStreak++;
+        } else if (
+          day.toDateString() ===
+          new Date(yesterday.setDate(yesterday.getDate() - 1)).toDateString()
+        ) {
+          currentStreak++;
+        } else {
+          break;
+        }
+      }
+
+      setStreak(currentStreak);
+      setLevel(Math.max(1, Math.floor(currentStreak / 3) + 1));
+    } catch (error) {
+      console.error('Error fetching user workouts:', error);
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <Text style={styles.title}>🏆 Dashboard</Text>
+      <Text>🔥 Streak: {streak} days</Text>
+      <Text>⚡ Level: {level}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  container: { padding: 20, marginTop: 40 },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
 });
